@@ -669,6 +669,14 @@ button {
   border-radius: 12px;
 }
 
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .history-row small {
   color: var(--text-soft);
 }

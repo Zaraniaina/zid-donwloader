@@ -11,9 +11,11 @@ type HistoryPageProps = {
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
+  onOpenFile?: (task?: DownloadTask) => void
+  onOpenFolder?: (folderPath?: string) => void
 }
 
-export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage, onNavigate }: HistoryPageProps) {
+export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage, onNavigate, onOpenFile, onOpenFolder }: HistoryPageProps) {
   const recentTasks = tasks.filter((task) => task.status === 'Completed' || task.status === 'Failed' || task.status === 'Paused')
 
   return (
@@ -52,7 +54,21 @@ export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage
                     {task.mode === 'audio' ? <Music4 size={15} /> : <Download size={15} />}
                     <span>{task.name}</span>
                   </div>
-                  <small>{task.message ?? task.status}</small>
+                  <div className="history-actions">
+                    <small>
+                      {task.message ?? task.status} · {task.folder}
+                    </small>
+                    {task.status === 'Completed' ? (
+                      <>
+                        <button type="button" className="ghost-button" onClick={() => onOpenFile?.(task)}>
+                          Ouvrir
+                        </button>
+                        <button type="button" className="ghost-button" onClick={() => onOpenFolder?.(task.folder)}>
+                          Dossier
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               ))
             )}

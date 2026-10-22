@@ -14,6 +14,7 @@ export type DownloadTask = {
   category: string
   mode: TaskMode
   message?: string
+  targetPath?: string
   downloadedBytes?: number
   totalBytes?: number
 }
@@ -111,9 +112,11 @@ export function buildAudioPath(folder: string, fileName: string): string {
   return `${(folder || 'Downloads').trim().replace(/[\\/]+$/, '')}/${withoutExtension}.mp3`
 }
 
-export function createTaskFromUrl(url: string, mode: TaskMode = 'download'): DownloadTask {
+export function createTaskFromUrl(url: string, mode: TaskMode = 'download', destinationFolder = 'Downloads'): DownloadTask {
   const rawName = extractFileNameFromUrl(url)
   const safeName = mode === 'audio' ? rawName.replace(/\.[^.]+$/, '.mp3') : rawName
+  const resolvedFolder = destinationFolder?.trim() || (mode === 'audio' ? 'Audio' : 'Downloads')
+  const targetPath = mode === 'audio' ? buildAudioPath(resolvedFolder, safeName) : buildDownloadPath(resolvedFolder, safeName)
 
   return {
     id: Date.now() + Math.floor(Math.random() * 1000),
@@ -124,10 +127,11 @@ export function createTaskFromUrl(url: string, mode: TaskMode = 'download'): Dow
     speed: 0,
     status: 'Queued',
     eta: '00:19:58',
-    folder: mode === 'audio' ? 'Audio' : 'Downloads',
+    folder: resolvedFolder,
     category: mode === 'audio' ? 'Audio' : 'Applications',
     mode,
     message: mode === 'audio' ? 'Conversion MP3 en attente' : 'Téléchargement en attente',
+    targetPath,
     downloadedBytes: 0,
     totalBytes: mode === 'audio' ? 24 * 1024 * 1024 : 1_800 * 1024 * 1024,
   }

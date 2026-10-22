@@ -24,11 +24,12 @@ describe('download queue', () => {
   })
 
   it('creates a download task from a valid URL', () => {
-    const task = createTaskFromUrl('https://example.com/folder/file.zip')
+    const task = createTaskFromUrl('https://example.com/folder/file.zip', 'download', 'C:/Users/test/Downloads')
 
     expect(task.name).toBe('file.zip')
     expect(task.status).toBe('Queued')
     expect(task.source).toBe('https://example.com/folder/file.zip')
+    expect(task.folder).toBe('C:/Users/test/Downloads')
   })
 
   it('extracts a clean file name from a URL with query parameters', () => {

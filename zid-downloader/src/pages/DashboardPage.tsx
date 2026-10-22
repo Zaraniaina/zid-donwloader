@@ -32,6 +32,8 @@ type DashboardPageProps = {
   onStartDownload: (taskId: number) => void
   onTogglePause: (taskId: number) => void
   onRemoveTask: (taskId: number) => void
+  onOpenFolder: (folderPath?: string) => void
+  onOpenFile: (task?: DownloadTask) => void
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
@@ -57,6 +59,8 @@ export function DashboardPage({
   onStartDownload,
   onTogglePause,
   onRemoveTask,
+  onOpenFolder,
+  onOpenFile,
   activeLimit,
   activePage,
   onNavigate,
@@ -183,6 +187,8 @@ export function DashboardPage({
               onStartDownload={onStartDownload}
               onTogglePause={onTogglePause}
               onRemoveTask={onRemoveTask}
+              onOpenFolder={onOpenFolder}
+              onOpenFile={onOpenFile}
             />
           </aside>
         </section>

@@ -1,4 +1,4 @@
-import { Download, Pause, Play, Video } from 'lucide-react'
+import { Download, FolderOpen, Pause, Play, Video } from 'lucide-react'
 import { formatBytes, getTotalBytes, type DownloadTask } from '../../lib/downloadQueue'
 
 type TaskDetailsProps = {
@@ -6,9 +6,11 @@ type TaskDetailsProps = {
   onStartDownload: (taskId: number) => void
   onTogglePause: (taskId: number) => void
   onRemoveTask: (taskId: number) => void
+  onOpenFolder: (folderPath?: string) => void
+  onOpenFile: (task?: DownloadTask) => void
 }
 
-export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRemoveTask }: TaskDetailsProps) {
+export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRemoveTask, onOpenFolder, onOpenFile }: TaskDetailsProps) {
   if (!selectedTask) {
     return null
   }
@@ -74,6 +76,16 @@ export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRe
           {selectedTask.status === 'Paused' ? <Play size={14} /> : <Pause size={14} />}
           {selectedTask.status === 'Paused' ? 'Reprendre' : 'Pause'}
         </button>
+        <button type="button" className="secondary-button action-button" onClick={() => onOpenFolder(selectedTask.folder)}>
+          <FolderOpen size={14} />
+          Ouvrir dossier
+        </button>
+        {selectedTask.status === 'Completed' ? (
+          <button type="button" className="secondary-button action-button" onClick={() => onOpenFile(selectedTask)}>
+            <Download size={14} />
+            Ouvrir fichier
+          </button>
+        ) : null}
         <button type="button" className="secondary-button action-button" onClick={() => onRemoveTask(selectedTask.id)}>
           Supprimer
         </button>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
 import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
 import { ConverterPage } from './pages/ConverterPage'
@@ -73,7 +74,7 @@ function App() {
       return
     }
 
-    const newTask = createTaskFromUrl(url, mode)
+    const newTask = createTaskFromUrl(url, mode, destinationFolder)
 
     setTasks((currentTasks) => [newTask, ...currentTasks])
     setSelectedId(newTask.id)
@@ -96,17 +97,72 @@ function App() {
     }
   }
 
+  const handleOpenFolder = async (folderPath = destinationFolder) => {
+    if (!folderPath) {
+      return
+    }
+
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(folderPath)
+    } catch {
+      // ignored in unsupported environments
+    }
+  }
+
+  const handleOpenFile = async (task?: DownloadTask) => {
+    if (!task) {
+      return
+    }
+
+    const targetPath = task.targetPath || (task.mode === 'audio' ? buildAudioPath(task.folder, task.name) : buildDownloadPath(task.folder, task.name))
+
+    if (!targetPath) {
+      return
+    }
+
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(targetPath)
+    } catch {
+      // ignored in unsupported environments
+    }
+  }
+
+  const notifyTaskCompletion = async (task: DownloadTask) => {
+    try {
+      let granted = await isPermissionGranted()
+      if (!granted) {
+        granted = await requestPermission() === 'granted'
+      }
+
+      if (granted) {
+        sendNotification({
+          title: task.mode === 'audio' ? 'Conversion MP3 terminée' : 'Téléchargement terminé',
+          body: `${task.name} est prêt dans ${task.folder || destinationFolder}`,
+        })
+      }
+    } catch {
+      // ignored in unsupported environments
+    }
+  }
+
   const runTaskDownload = async (taskId: number, signal?: AbortSignal) => {
     const task = tasks.find((candidate) => candidate.id === taskId)
     if (!task || !destinationFolder) {
       return
     }
 
+    const targetFolder = task.folder || destinationFolder
+    const filePath = task.mode === 'audio' ? buildAudioPath(targetFolder, task.name) : buildDownloadPath(targetFolder, task.name)
+
     setTasks((currentTasks) =>
       currentTasks.map((entry) =>
         entry.id === taskId
           ? {
               ...entry,
+              folder: targetFolder,
+              targetPath: filePath,
               status: 'Downloading',
               eta: '00:00:00',
               speed: 2.4,
@@ -117,13 +173,14 @@ function App() {
     )
 
     try {
-      const filePath = task.mode === 'audio' ? buildAudioPath(destinationFolder, task.name) : buildDownloadPath(destinationFolder, task.name)
       const command = task.mode === 'audio' ? 'download_and_convert_to_mp3' : 'download_file'
 
       await invoke<string>(command, {
         url: task.source,
         path: filePath,
       })
+
+      await notifyTaskCompletion({ ...task, folder: targetFolder, targetPath: filePath })
 
       setTasks((currentTasks) =>
         currentTasks.map((entry) =>
@@ -134,7 +191,8 @@ function App() {
                 progress: 100,
                 speed: 0,
                 eta: '00:00:00',
-                folder: destinationFolder,
+                folder: targetFolder,
+                targetPath: filePath,
                 message: entry.mode === 'audio' ? 'Conversion MP3 terminée' : 'Téléchargement terminé',
                 downloadedBytes: getTotalBytes(entry) || getDownloadedBytes(entry),
                 totalBytes: getTotalBytes(entry) || getDownloadedBytes(entry),
@@ -247,6 +305,8 @@ function App() {
     url,
     onUrlChange: setUrl,
     onAddTask: handleAddTask,
+    onOpenFile: handleOpenFile,
+    onOpenFolder: handleOpenFolder,
     queuedCount: stats.queued,
     activeLimit: MAX_ACTIVE_TASKS,
     activePage,
@@ -290,6 +350,8 @@ function App() {
       onStartDownload={handleStartDownload}
       onTogglePause={handleTogglePause}
       onRemoveTask={handleRemoveTask}
+      onOpenFolder={handleOpenFolder}
+      onOpenFile={handleOpenFile}
       activeLimit={MAX_ACTIVE_TASKS}
       activePage={activePage}
       onNavigate={setActivePage}
