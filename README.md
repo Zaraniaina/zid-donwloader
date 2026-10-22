@@ -1,26 +1,37 @@
 # zid-downloader
 
-Application de bureau pour gérer les téléchargements avec une interface claire, une file d’attente simple et un système de destination de fichiers local.
+Version gratuite et simple d’un gestionnaire de téléchargements et de conversion vidéo vers MP3.
 
-## Objectif
+## Vision du produit
 
-zid-downloader vise à offrir une expérience de téléchargement plus lisible et plus légère qu’un navigateur classique, avec :
+Cette version abandonne la logique premium et se concentre sur un besoin direct et utile :
 
-- ajout de téléchargements par URL
-- suivi de progression
-- file d’attente avec priorité de tâches
-- mise en pause / reprise
-- choix du dossier de destination
-- persistance locale de l’état
-- préparation pour l’intégration native Tauri
+- télécharger des fichiers depuis une URL
+- organiser les fichiers dans un dossier choisi par l’utilisateur
+- suivre les téléchargements en temps réel
+- convertir des vidéos en MP3 depuis une URL ou un lien vidéo
+- garder une interface claire, légère et accessible
+
+L’objectif n’est pas d’être un produit payant, mais un outil utile, gratuit et fonctionnel pour les utilisateurs qui veulent télécharger rapidement des fichiers ou extraire l’audio d’une vidéo.
+
+## Fonctionnalités
+
+- Ajout d’un téléchargement par URL
+- Sélection du dossier de destination
+- Suivi de progression et vitesse estimée
+- Mise en pause, reprise et suppression
+- File d’attente simple
+- Persistance locale des tâches
+- Conversion vidéo vers MP3 depuis une URL vidéo
+- Interface desktop adaptative en thème clair / sombre
 
 ## Stack technique
 
 - React + Vite + TypeScript
-- Tauri 2
-- Lucide React pour les icônes
-- Vitest pour les tests unitaires
-- CSS personnalisé pour l’interface
+- Tauri 2 pour l’application desktop
+- Lucide React pour les icônes réelles
+- Vitest pour les tests de logique
+- CSS personnalisé avec palette douce bleu ciel
 
 ## Structure du projet
 
@@ -47,11 +58,9 @@ Donwloader/
 
 - Node.js 18+
 - npm
-- Rust et Cargo (pour le mode desktop Tauri)
+- Rust et Cargo pour la version desktop Tauri
 
-## Lancer le projet
-
-Depuis le dossier du projet frontend :
+## Démarrage rapide
 
 ```bash
 cd zid-downloader
@@ -59,7 +68,7 @@ npm install
 npm run dev
 ```
 
-Pour le mode desktop Tauri :
+## Lancement de la version desktop
 
 ```bash
 cd zid-downloader
@@ -68,7 +77,7 @@ npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## Tester
+## Tests
 
 ```bash
 cd zid-downloader
@@ -82,12 +91,15 @@ cd zid-downloader
 npm run build
 ```
 
-## Notes de développement
+## Règle de la version actuelle
 
-- Les tâches sont stockées localement pour garder l’état entre les sessions.
-- La file d’attente est gérée par logique interne avec un nombre maximal de téléchargements actifs.
-- Le projet est conçu pour évoluer vers un vrai moteur de téléchargement réel côté desktop, en respectant les spécifications du cahier des charges.
+Cette version cible un usage gratuit et immédiat :
+
+- pas de licence
+- pas de verrouillage premium
+- uniquement téléchargement via URL et extraction audio depuis vidéo
+- expérience simple et rapide pour les utilisateurs standards
 
 ## Statut
 
-Version de travail en cours de développement, avec interface fonctionnelle et logique de file d’attente validée.
+Version actuelle orientée gratuit, avec interface fonctionnelle, logique de file d’attente validée et base de conversion vidéo vers MP3 en préparation.

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_ACTIVE_TASKS,
   advanceDownloadQueue,
+  buildAudioPath,
   buildDownloadPath,
   createTaskFromUrl,
   extractFileNameFromUrl,
@@ -13,8 +14,8 @@ describe('download queue', () => {
     const queuedTaskId = 42
 
     const nextTasks = advanceDownloadQueue([
-      { id: 999, name: 'done.zip', source: 'https://example.com/done.zip', size: '500 MB', progress: 100, speed: 0, status: 'Completed', eta: '00:00:00', folder: 'Downloads', category: 'Archives' },
-      { id: queuedTaskId, name: 'queued.zip', source: 'https://example.com/queued.zip', size: '700 MB', progress: 18, speed: 2.1, status: 'Queued', eta: '00:20:00', folder: 'Downloads', category: 'Archives' },
+      { id: 999, name: 'done.zip', source: 'https://example.com/done.zip', size: '500 MB', progress: 100, speed: 0, status: 'Completed', eta: '00:00:00', folder: 'Downloads', category: 'Archives', mode: 'download' },
+      { id: queuedTaskId, name: 'queued.zip', source: 'https://example.com/queued.zip', size: '700 MB', progress: 18, speed: 2.1, status: 'Queued', eta: '00:20:00', folder: 'Downloads', category: 'Archives', mode: 'download' },
     ])
 
     const queuedItem = nextTasks.find((task) => task.id === queuedTaskId)
@@ -40,5 +41,11 @@ describe('download queue', () => {
     const path = buildDownloadPath('C:/Downloads', 'bad:name?.zip')
 
     expect(path).toBe('C:/Downloads/bad_name_.zip')
+  })
+
+  it('builds a safe MP3 destination for a video task', () => {
+    const path = buildAudioPath('C:/Downloads', 'video.mp4')
+
+    expect(path).toBe('C:/Downloads/video.mp3')
   })
 })

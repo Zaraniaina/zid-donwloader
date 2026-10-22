@@ -1,4 +1,5 @@
 export type TaskStatus = 'Downloading' | 'Queued' | 'Paused' | 'Completed' | 'Failed'
+export type TaskMode = 'download' | 'audio'
 
 export type DownloadTask = {
   id: number
@@ -11,12 +12,28 @@ export type DownloadTask = {
   eta: string
   folder: string
   category: string
+  mode: TaskMode
+  message?: string
+  downloadedBytes?: number
+  totalBytes?: number
 }
 
 export const MAX_ACTIVE_TASKS = 1
 export const STORAGE_KEYS = {
   tasks: 'zid-downloader.tasks',
   theme: 'zid-downloader.theme',
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 MB'
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** index
+
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
 export const defaultTasks: DownloadTask[] = [
@@ -31,18 +48,26 @@ export const defaultTasks: DownloadTask[] = [
     eta: '00:11:42',
     folder: 'Downloads',
     category: 'Archives',
+    mode: 'download',
+    message: 'Téléchargement en cours',
+    downloadedBytes: 1_400_000_000,
+    totalBytes: 2_100_000_000,
   },
   {
     id: 2,
-    name: 'launch-demo.mp4',
-    source: 'https://cdn.example.com/launch-demo.mp4',
-    size: '860 MB',
+    name: 'launch-demo.mp3',
+    source: 'https://cdn.example.com/launch-demo.mp3',
+    size: '24 MB',
     progress: 42,
     speed: 3.2,
     status: 'Queued',
     eta: '00:22:10',
-    folder: 'Videos',
-    category: 'Videos',
+    folder: 'Audio',
+    category: 'Audio',
+    mode: 'audio',
+    message: 'Conversion MP3 en attente',
+    downloadedBytes: 10_000_000,
+    totalBytes: 24_000_000,
   },
   {
     id: 3,
@@ -55,6 +80,10 @@ export const defaultTasks: DownloadTask[] = [
     eta: '00:00:00',
     folder: 'Documents',
     category: 'Documents',
+    mode: 'download',
+    message: 'Téléchargement terminé',
+    downloadedBytes: 540_000_000,
+    totalBytes: 540_000_000,
   },
 ]
 
@@ -76,21 +105,40 @@ export function buildDownloadPath(folder: string, fileName: string): string {
   return `${cleanFolder || 'Downloads'}/${cleanName || 'download.bin'}`
 }
 
-export function createTaskFromUrl(url: string): DownloadTask {
-  const taskName = extractFileNameFromUrl(url)
+export function buildAudioPath(folder: string, fileName: string): string {
+  const cleanFile = (fileName || 'download.mp4').replace(/[\\/:*?"<>|]/g, '_')
+  const withoutExtension = cleanFile.includes('.') ? cleanFile.replace(/\.[^.]+$/, '') : cleanFile
+  return `${(folder || 'Downloads').trim().replace(/[\\/]+$/, '')}/${withoutExtension}.mp3`
+}
+
+export function createTaskFromUrl(url: string, mode: TaskMode = 'download'): DownloadTask {
+  const rawName = extractFileNameFromUrl(url)
+  const safeName = mode === 'audio' ? rawName.replace(/\.[^.]+$/, '.mp3') : rawName
 
   return {
     id: Date.now() + Math.floor(Math.random() * 1000),
-    name: taskName,
+    name: safeName || 'download.bin',
     source: url,
-    size: '1.8 GB',
-    progress: 12,
-    speed: 2.1,
+    size: mode === 'audio' ? '24 MB' : '1.8 GB',
+    progress: 0,
+    speed: 0,
     status: 'Queued',
     eta: '00:19:58',
-    folder: 'Downloads',
-    category: 'Applications',
+    folder: mode === 'audio' ? 'Audio' : 'Downloads',
+    category: mode === 'audio' ? 'Audio' : 'Applications',
+    mode,
+    message: mode === 'audio' ? 'Conversion MP3 en attente' : 'Téléchargement en attente',
+    downloadedBytes: 0,
+    totalBytes: mode === 'audio' ? 24 * 1024 * 1024 : 1_800 * 1024 * 1024,
   }
+}
+
+export function getTotalBytes(task: DownloadTask): number {
+  return task.totalBytes ?? 0
+}
+
+export function getDownloadedBytes(task: DownloadTask): number {
+  return task.downloadedBytes ?? 0
 }
 
 export function advanceDownloadQueue(currentTasks: DownloadTask[]): DownloadTask[] {
