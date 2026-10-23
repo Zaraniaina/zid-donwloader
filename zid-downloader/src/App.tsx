@@ -1,360 +1,250 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { useEffect, useMemo, useState } from 'react'
+import { downloadDir } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification'
+import { open as openPath } from '@tauri-apps/plugin-shell'
+
 import './App.css'
-import { DashboardPage } from './pages/DashboardPage'
+import { useDownloads } from './hooks/useDownloads'
+import { MAX_ACTIVE_TASKS, STORAGE_KEYS, type DownloadTask, type TaskMode } from './lib/downloadQueue'
+import type { AppPage } from './lib/navigation'
+import { errorMessage } from './lib/transfer'
 import { ConverterPage } from './pages/ConverterPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { FoldersPage } from './pages/FoldersPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { SettingsPage } from './pages/SettingsPage'
-import {
-  MAX_ACTIVE_TASKS,
-  advanceDownloadQueue,
-  buildAudioPath,
-  buildDownloadPath,
-  createTaskFromUrl,
-  formatBytes,
-  getDownloadedBytes,
-  getStoredTasks,
-  getTotalBytes,
-  saveTasks,
-  type DownloadTask,
-  type TaskMode,
-} from './lib/downloadQueue'
 
-type AppPage = 'dashboard' | 'converter' | 'folders' | 'history' | 'settings'
+function readStored(key: string): string | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  return window.localStorage.getItem(key)
+}
 
 function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') {
-      return 'light'
-    }
-
-    const savedTheme = window.localStorage.getItem('zid-downloader.theme')
-    return savedTheme === 'dark' ? 'dark' : 'light'
-  })
-  const [tasks, setTasks] = useState<DownloadTask[]>(() => getStoredTasks())
-  const [selectedId, setSelectedId] = useState<number>(() => getStoredTasks()[0]?.id ?? 0)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    readStored(STORAGE_KEYS.theme) === 'dark' ? 'dark' : 'light',
+  )
+  const [mode, setMode] = useState<TaskMode>(() =>
+    readStored(STORAGE_KEYS.mode) === 'audio' ? 'audio' : 'download',
+  )
+  const [folder, setFolder] = useState(() => readStored(STORAGE_KEYS.folder) ?? '')
+  const [activePage, setActivePage] = useState<AppPage>('dashboard')
   const [url, setUrl] = useState('')
   const [search, setSearch] = useState('')
-  const [destinationFolder, setDestinationFolder] = useState<string>('Downloads')
-  const [mode, setMode] = useState<TaskMode>('download')
-  const [activePage, setActivePage] = useState<AppPage>('dashboard')
-  const downloadControllersRef = useRef<Map<number, AbortController>>(new Map())
+  const [selectedId, setSelectedId] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
 
-  useEffect(() => {
-    saveTasks(tasks)
-  }, [tasks])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('zid-downloader.theme', theme)
-    }
-  }, [theme])
-
-  useEffect(() => {
-    if (tasks.length > 0 && !tasks.some((task) => task.id === selectedId)) {
-      setSelectedId(tasks[0].id)
-    }
-  }, [selectedId, tasks])
-
-  const selectedTask = tasks.find((task) => task.id === selectedId) ?? tasks[0]
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setTasks((currentTasks) => advanceDownloadQueue(currentTasks))
-    }, 2200)
-
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const handleAddTask = () => {
-    if (!url.trim()) {
-      return
-    }
-
-    const newTask = createTaskFromUrl(url, mode, destinationFolder)
-
-    setTasks((currentTasks) => [newTask, ...currentTasks])
-    setSelectedId(newTask.id)
-    setUrl('')
-  }
-
-  const handleChooseFolder = async () => {
-    try {
-      const chosen = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: destinationFolder,
-      })
-
-      if (typeof chosen === 'string') {
-        setDestinationFolder(chosen)
-      }
-    } catch {
-      // user cancelled
-    }
-  }
-
-  const handleOpenFolder = async (folderPath = destinationFolder) => {
-    if (!folderPath) {
-      return
-    }
-
-    try {
-      const { open } = await import('@tauri-apps/plugin-shell')
-      await open(folderPath)
-    } catch {
-      // ignored in unsupported environments
-    }
-  }
-
-  const handleOpenFile = async (task?: DownloadTask) => {
-    if (!task) {
-      return
-    }
-
-    const targetPath = task.targetPath || (task.mode === 'audio' ? buildAudioPath(task.folder, task.name) : buildDownloadPath(task.folder, task.name))
-
-    if (!targetPath) {
-      return
-    }
-
-    try {
-      const { open } = await import('@tauri-apps/plugin-shell')
-      await open(targetPath)
-    } catch {
-      // ignored in unsupported environments
-    }
-  }
-
-  const notifyTaskCompletion = async (task: DownloadTask) => {
+  const notifyCompletion = async (task: DownloadTask) => {
     try {
       let granted = await isPermissionGranted()
       if (!granted) {
-        granted = await requestPermission() === 'granted'
+        granted = (await requestPermission()) === 'granted'
       }
 
       if (granted) {
         sendNotification({
           title: task.mode === 'audio' ? 'Conversion MP3 terminée' : 'Téléchargement terminé',
-          body: `${task.name} est prêt dans ${task.folder || destinationFolder}`,
+          body: `${task.name} · ${task.folder}`,
         })
       }
     } catch {
-      // ignored in unsupported environments
+      // la notification est un bonus, pas un blocage
     }
   }
 
-  const runTaskDownload = async (taskId: number, signal?: AbortSignal) => {
-    const task = tasks.find((candidate) => candidate.id === taskId)
-    if (!task || !destinationFolder) {
+  const downloads = useDownloads({ onCompleted: notifyCompletion })
+  const { tasks } = downloads
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.theme, theme)
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.mode, mode)
+  }, [mode])
+
+  useEffect(() => {
+    if (folder) {
+      window.localStorage.setItem(STORAGE_KEYS.folder, folder)
+    }
+  }, [folder])
+
+  useEffect(() => {
+    if (folder) {
       return
     }
 
-    const targetFolder = task.folder || destinationFolder
-    const filePath = task.mode === 'audio' ? buildAudioPath(targetFolder, task.name) : buildDownloadPath(targetFolder, task.name)
-
-    setTasks((currentTasks) =>
-      currentTasks.map((entry) =>
-        entry.id === taskId
-          ? {
-              ...entry,
-              folder: targetFolder,
-              targetPath: filePath,
-              status: 'Downloading',
-              eta: '00:00:00',
-              speed: 2.4,
-              message: entry.mode === 'audio' ? 'Extraction audio en cours' : 'Téléchargement en cours',
-            }
-          : entry,
-      ),
-    )
-
-    try {
-      const command = task.mode === 'audio' ? 'download_and_convert_to_mp3' : 'download_file'
-
-      await invoke<string>(command, {
-        url: task.source,
-        path: filePath,
+    let active = true
+    void downloadDir()
+      .then((directory) => {
+        if (active && directory) {
+          setFolder(directory)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setFolder('Downloads')
+        }
       })
 
-      await notifyTaskCompletion({ ...task, folder: targetFolder, targetPath: filePath })
-
-      setTasks((currentTasks) =>
-        currentTasks.map((entry) =>
-          entry.id === taskId
-            ? {
-                ...entry,
-                status: 'Completed',
-                progress: 100,
-                speed: 0,
-                eta: '00:00:00',
-                folder: targetFolder,
-                targetPath: filePath,
-                message: entry.mode === 'audio' ? 'Conversion MP3 terminée' : 'Téléchargement terminé',
-                downloadedBytes: getTotalBytes(entry) || getDownloadedBytes(entry),
-                totalBytes: getTotalBytes(entry) || getDownloadedBytes(entry),
-                size: getTotalBytes(entry) > 0 ? formatBytes(getTotalBytes(entry)) : entry.size,
-              }
-            : entry,
-        ),
-      )
-    } catch (error) {
-      if (signal?.aborted) {
-        setTasks((currentTasks) =>
-          currentTasks.map((entry) =>
-            entry.id === taskId
-              ? { ...entry, status: 'Paused', speed: 0, eta: 'Paused', message: entry.mode === 'audio' ? 'Conversion mise en pause' : 'Téléchargement mis en pause' }
-              : entry,
-          ),
-        )
-        return
-      }
-
-      setTasks((currentTasks) =>
-        currentTasks.map((entry) =>
-          entry.id === taskId
-            ? {
-                ...entry,
-                status: 'Failed',
-                speed: 0,
-                eta: 'Erreur',
-                message: entry.mode === 'audio' ? 'Échec de la conversion MP3' : 'Échec du téléchargement',
-              }
-            : entry,
-        ),
-      )
-    } finally {
-      downloadControllersRef.current.delete(taskId)
+    return () => {
+      active = false
     }
-  }
+  }, [folder])
 
-  const handleStartDownload = async (taskId: number) => {
-    const task = tasks.find((candidate) => candidate.id === taskId)
-    if (!task || !destinationFolder) {
-      return
-    }
-
-    const controller = new AbortController()
-    downloadControllersRef.current.set(taskId, controller)
-    await runTaskDownload(taskId, controller.signal)
-  }
-
-  const handleTogglePause = (taskId: number) => {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) => {
-        if (task.id !== taskId) {
-          return task
-        }
-
-        if (task.status === 'Paused') {
-          const controller = new AbortController()
-          downloadControllersRef.current.set(taskId, controller)
-          void runTaskDownload(taskId, controller.signal)
-          return {
-            ...task,
-            status: 'Downloading',
-            speed: 2.6,
-            eta: '00:08:10',
-          }
-        }
-
-        if (task.status === 'Downloading' || task.status === 'Queued') {
-          const controller = downloadControllersRef.current.get(taskId)
-          controller?.abort()
-          downloadControllersRef.current.delete(taskId)
-          return { ...task, status: 'Paused', speed: 0, eta: 'Paused' }
-        }
-
-        return task
-      }),
-    )
-  }
-
-  const handleRemoveTask = (taskId: number) => {
-    setTasks((currentTasks) => currentTasks.filter((task) => task.id !== taskId))
-    if (selectedId === taskId) {
-      const nextTask = tasks.find((task) => task.id !== taskId)
-      setSelectedId(nextTask ? nextTask.id : 0)
-    }
-
-    const controller = downloadControllersRef.current.get(taskId)
-    controller?.abort()
-    downloadControllersRef.current.delete(taskId)
-  }
+  const selectedTask = tasks.find((task) => task.id === selectedId) ?? tasks[0]
 
   const stats = useMemo(() => {
     const active = tasks.filter((task) => task.status === 'Downloading').length
     const completed = tasks.filter((task) => task.status === 'Completed').length
     const queued = tasks.filter((task) => task.status === 'Queued').length
-    const speed = tasks.filter((task) => task.status === 'Downloading').reduce((total, task) => total + task.speed, 0)
+    const speed = tasks.reduce(
+      (total, task) => total + (task.status === 'Downloading' ? task.speed : 0),
+      0,
+    )
 
     return { active, completed, queued, speed }
   }, [tasks])
 
-  const formattedSpeed = `${stats.speed.toFixed(1)} MB/s`
+  const formattedSpeed = `${stats.speed.toFixed(1)} Mo/s`
 
-  const pageProps = {
+  const handleAddTask = (taskMode: TaskMode) => {
+    const result = downloads.addTask({ url, mode: taskMode, folder })
+
+    if (!result.ok) {
+      setNotice(result.error)
+      return
+    }
+
+    setSelectedId(result.id)
+    setUrl('')
+    setNotice(null)
+  }
+
+  const handleChooseFolder = async () => {
+    try {
+      const chosen = await open({ directory: true, multiple: false, defaultPath: folder || undefined })
+
+      if (typeof chosen === 'string') {
+        setFolder(chosen)
+        setNotice(null)
+      }
+    } catch (error) {
+      setNotice(errorMessage(error, 'Le sélecteur de dossier n’a pas pu s’ouvrir.'))
+    }
+  }
+
+  const handleOpenFolder = async (folderPath = folder) => {
+    if (!folderPath) {
+      setNotice('Choisissez d’abord un dossier de destination.')
+      return
+    }
+
+    try {
+      await openPath(folderPath)
+    } catch (error) {
+      setNotice(errorMessage(error, `Impossible d’ouvrir ${folderPath}.`))
+    }
+  }
+
+  const handleOpenFile = async (task?: DownloadTask) => {
+    if (!task?.targetPath) {
+      setNotice('Ce fichier n’a pas encore d’emplacement.')
+      return
+    }
+
+    try {
+      await openPath(task.targetPath)
+    } catch (error) {
+      setNotice(errorMessage(error, 'Impossible d’ouvrir le fichier.'))
+    }
+  }
+
+  const toggleTheme = () => setTheme((current) => (current === 'light' ? 'dark' : 'light'))
+
+  const shared = {
     theme,
     tasks,
-    destinationFolder,
-    onChooseFolder: handleChooseFolder,
-    onSetTheme: () => setTheme((current) => (current === 'light' ? 'dark' : 'light')),
-    url,
-    onUrlChange: setUrl,
-    onAddTask: handleAddTask,
-    onOpenFile: handleOpenFile,
-    onOpenFolder: handleOpenFolder,
     queuedCount: stats.queued,
     activeLimit: MAX_ACTIVE_TASKS,
     activePage,
     onNavigate: setActivePage,
+    onSetTheme: toggleTheme,
   }
 
   if (activePage === 'converter') {
-    return <ConverterPage {...pageProps} />
+    return (
+      <ConverterPage
+        {...shared}
+        url={url}
+        onUrlChange={setUrl}
+        onAddTask={() => handleAddTask('audio')}
+        destinationFolder={folder}
+        onChooseFolder={handleChooseFolder}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+      />
+    )
   }
 
   if (activePage === 'folders') {
-    return <FoldersPage {...pageProps} />
+    return (
+      <FoldersPage
+        {...shared}
+        destinationFolder={folder}
+        onChooseFolder={handleChooseFolder}
+        onOpenFolder={handleOpenFolder}
+      />
+    )
   }
 
   if (activePage === 'history') {
-    return <HistoryPage {...pageProps} />
+    return (
+      <HistoryPage {...shared} onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
+    )
   }
 
   if (activePage === 'settings') {
-    return <SettingsPage {...pageProps} />
+    return (
+      <SettingsPage
+        {...shared}
+        destinationFolder={folder}
+        onChooseFolder={handleChooseFolder}
+      />
+    )
   }
 
   return (
     <DashboardPage
-      theme={theme}
-      tasks={tasks}
+      {...shared}
       search={search}
-      destinationFolder={destinationFolder}
+      destinationFolder={folder}
       mode={mode}
       selectedTask={selectedTask}
       formattedSpeed={formattedSpeed}
       stats={stats}
-      onSetTheme={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+      notice={notice}
+      onDismissNotice={() => setNotice(null)}
       onSearch={setSearch}
       onChooseFolder={handleChooseFolder}
       onModeChange={setMode}
-      onAddTask={handleAddTask}
+      onAddTask={() => handleAddTask(mode)}
       onUrlChange={setUrl}
       url={url}
       onSelectTask={setSelectedId}
-      onStartDownload={handleStartDownload}
-      onTogglePause={handleTogglePause}
-      onRemoveTask={handleRemoveTask}
+      onStartDownload={downloads.startTask}
+      onTogglePause={downloads.pauseTask}
+      onRemoveTask={downloads.removeTask}
       onOpenFolder={handleOpenFolder}
       onOpenFile={handleOpenFile}
-      activeLimit={MAX_ACTIVE_TASKS}
-      activePage={activePage}
-      onNavigate={setActivePage}
     />
   )
 }

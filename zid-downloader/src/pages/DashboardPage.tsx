@@ -1,11 +1,11 @@
-import { Bell, ChevronDown, Download, Search, Settings, Video } from 'lucide-react'
-import { Sidebar } from '../components/layout/Sidebar'
+import { Download, Search, Settings, Video } from 'lucide-react'
+
 import { StatsGrid } from '../components/dashboard/StatsGrid'
+import { Sidebar } from '../components/layout/Sidebar'
 import { TaskDetails } from '../components/tasks/TaskDetails'
 import { TaskList } from '../components/tasks/TaskList'
-import type { DownloadTask, TaskMode } from '../lib/downloadQueue'
-
-type AppPage = 'dashboard' | 'converter' | 'folders' | 'history' | 'settings'
+import { statusLabel, type DownloadTask, type TaskMode } from '../lib/downloadQueue'
+import type { AppPage } from '../lib/navigation'
 
 type DashboardPageProps = {
   theme: 'light' | 'dark'
@@ -21,22 +21,24 @@ type DashboardPageProps = {
     queued: number
     speed: number
   }
-  onSetTheme: () => void
+  notice?: string | null
+  onDismissNotice: () => void
   onSearch: (value: string) => void
   onChooseFolder: () => void
   onModeChange: (nextMode: TaskMode) => void
   onAddTask: () => void
   onUrlChange: (value: string) => void
   url: string
-  onSelectTask: (taskId: number) => void
-  onStartDownload: (taskId: number) => void
-  onTogglePause: (taskId: number) => void
-  onRemoveTask: (taskId: number) => void
+  onSelectTask: (taskId: string) => void
+  onStartDownload: (taskId: string) => void
+  onTogglePause: (taskId: string) => void
+  onRemoveTask: (taskId: string) => void
   onOpenFolder: (folderPath?: string) => void
   onOpenFile: (task?: DownloadTask) => void
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
+  onSetTheme: () => void
 }
 
 export function DashboardPage({
@@ -48,7 +50,8 @@ export function DashboardPage({
   selectedTask,
   formattedSpeed,
   stats,
-  onSetTheme,
+  notice,
+  onDismissNotice,
   onSearch,
   onChooseFolder,
   onModeChange,
@@ -64,8 +67,11 @@ export function DashboardPage({
   activeLimit,
   activePage,
   onNavigate,
+  onSetTheme,
 }: DashboardPageProps) {
-  const filteredTasks = tasks.filter((task) => task.name.toLowerCase().includes(search.toLowerCase()))
+  const filteredTasks = tasks.filter((task) =>
+    task.name.toLowerCase().includes(search.trim().toLowerCase()),
+  )
 
   return (
     <div className={`app-shell ${theme}`}>
@@ -76,6 +82,7 @@ export function DashboardPage({
         activeLimit={activeLimit}
         activePage={activePage}
         onNavigate={onNavigate}
+        onSetTheme={onSetTheme}
       />
 
       <main className="main-panel">
@@ -92,40 +99,49 @@ export function DashboardPage({
           </div>
 
           <div className="topbar-actions">
-            <button type="button" className="icon-button" aria-label="Notifications">
-              <Bell size={16} />
-            </button>
             <button
               type="button"
               className="icon-button"
-              aria-label="Settings"
-              onClick={onSetTheme}
+              aria-label="Paramètres"
+              onClick={() => onNavigate('settings')}
             >
               <Settings size={16} />
             </button>
           </div>
         </header>
 
+        {notice ? (
+          <div className="notice" role="alert">
+            <span>{notice}</span>
+            <button type="button" className="ghost-button" onClick={onDismissNotice}>
+              Fermer
+            </button>
+          </div>
+        ) : null}
+
         <div className="feature-banner">
           <span className="feature-badge">Gratuit</span>
           <strong>URL + conversion vidéo vers MP3</strong>
         </div>
 
-        <StatsGrid active={stats.active} completed={stats.completed} speedText={formattedSpeed} />
+        <StatsGrid
+          active={stats.active}
+          completed={stats.completed}
+          queued={stats.queued}
+          speedText={formattedSpeed}
+        />
 
         <section className="workspace-grid">
           <div className="panel main-panel-card">
             <div className="panel-header">
               <span>Nouvelle tâche</span>
-              <button type="button" className="secondary-button">
-                Importer depuis le navigateur
-              </button>
             </div>
 
-            <div className="mode-toggle" aria-label="Choix du type de tâche">
+            <div className="mode-toggle" role="group" aria-label="Choix du type de tâche">
               <button
                 type="button"
                 className={mode === 'download' ? 'mode-button active' : 'mode-button'}
+                aria-pressed={mode === 'download'}
                 onClick={() => onModeChange('download')}
               >
                 <Download size={15} />
@@ -134,6 +150,7 @@ export function DashboardPage({
               <button
                 type="button"
                 className={mode === 'audio' ? 'mode-button active' : 'mode-button'}
+                aria-pressed={mode === 'audio'}
                 onClick={() => onModeChange('audio')}
               >
                 <Video size={15} />
@@ -149,8 +166,17 @@ export function DashboardPage({
                 id="download-url"
                 type="text"
                 value={url}
-                placeholder={mode === 'audio' ? 'Coller une URL vidéo pour extraire l’audio' : 'Coller une URL de fichier'}
+                placeholder={
+                  mode === 'audio'
+                    ? 'Coller l’URL directe d’un fichier vidéo'
+                    : 'Coller une URL de fichier'
+                }
                 onChange={(event) => onUrlChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    onAddTask()
+                  }
+                }}
               />
               <button type="button" className="secondary-button" onClick={onChooseFolder}>
                 Dossier
@@ -162,24 +188,34 @@ export function DashboardPage({
 
             <div className="meta-row compact-row">
               <span>Destination</span>
-              <strong>{destinationFolder}</strong>
+              <strong>{destinationFolder || 'Aucun dossier choisi'}</strong>
             </div>
 
             <div className="list-header">
-              <h2>Tâches actives</h2>
-              <button type="button" className="ghost-button">
-                Trier
-                <ChevronDown size={15} />
-              </button>
+              <h2>Tâches</h2>
+              <span className="pill">{filteredTasks.length} affichée(s)</span>
             </div>
 
-            <TaskList tasks={filteredTasks} selectedTask={selectedTask} onSelect={onSelectTask} />
+            <TaskList
+              tasks={filteredTasks}
+              selectedTask={selectedTask}
+              onSelect={onSelectTask}
+              emptyLabel={
+                search.trim()
+                  ? 'Aucune tâche ne correspond à cette recherche.'
+                  : 'Ajoutez une URL pour démarrer un téléchargement.'
+              }
+            />
           </div>
 
           <aside className="panel detail-panel">
             <div className="panel-header">
               <span>Détails</span>
-              <span className="pill success">{selectedTask?.status}</span>
+              {selectedTask ? (
+                <span className={`pill status-${selectedTask.status.toLowerCase()}`}>
+                  {statusLabel(selectedTask.status)}
+                </span>
+              ) : null}
             </div>
 
             <TaskDetails

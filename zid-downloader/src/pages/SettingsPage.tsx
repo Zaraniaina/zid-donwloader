@@ -1,20 +1,32 @@
-import { Bell, Download, MoonStar, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { FolderOpen, MoonStar, SlidersHorizontal, Sun } from 'lucide-react'
+
 import { Sidebar } from '../components/layout/Sidebar'
 import type { DownloadTask } from '../lib/downloadQueue'
-
-type AppPage = 'dashboard' | 'converter' | 'folders' | 'history' | 'settings'
+import type { AppPage } from '../lib/navigation'
 
 type SettingsPageProps = {
   theme: 'light' | 'dark'
   tasks: DownloadTask[]
   onSetTheme: () => void
+  destinationFolder: string
+  onChooseFolder: () => void
   queuedCount: number
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
 }
 
-export function SettingsPage({ theme, tasks, onSetTheme, queuedCount, activeLimit, activePage, onNavigate }: SettingsPageProps) {
+export function SettingsPage({
+  theme,
+  tasks,
+  onSetTheme,
+  destinationFolder,
+  onChooseFolder,
+  queuedCount,
+  activeLimit,
+  activePage,
+  onNavigate,
+}: SettingsPageProps) {
   return (
     <div className={`app-shell ${theme}`}>
       <Sidebar
@@ -24,6 +36,7 @@ export function SettingsPage({ theme, tasks, onSetTheme, queuedCount, activeLimi
         activeLimit={activeLimit}
         activePage={activePage}
         onNavigate={onNavigate}
+        onSetTheme={onSetTheme}
       />
 
       <main className="page-main">
@@ -49,23 +62,20 @@ export function SettingsPage({ theme, tasks, onSetTheme, queuedCount, activeLimi
                   <strong>Thème</strong>
                   <small>{theme === 'dark' ? 'Mode sombre' : 'Mode clair'}</small>
                 </div>
-                <MoonStar size={16} />
+                {theme === 'dark' ? <MoonStar size={16} /> : <Sun size={16} />}
               </button>
 
-              <div className="setting-row">
+              <button type="button" className="setting-row" onClick={onChooseFolder}>
                 <div className="setting-copy">
-                  <strong>Notifications</strong>
-                  <small>Alertes de fin de téléchargement</small>
+                  <strong>Dossier de destination</strong>
+                  <small>{destinationFolder || 'Aucun dossier choisi'}</small>
                 </div>
-                <Bell size={16} />
-              </div>
+                <FolderOpen size={16} />
+              </button>
 
-              <div className="setting-row">
-                <div className="setting-copy">
-                  <strong>Gestion des fichiers</strong>
-                  <small>Sauvegarder les fichiers après conversion</small>
-                </div>
-                <Download size={16} />
+              <div className="meta-row">
+                <span>Téléchargements simultanés</span>
+                <strong>{activeLimit}</strong>
               </div>
             </div>
           </div>
@@ -73,23 +83,27 @@ export function SettingsPage({ theme, tasks, onSetTheme, queuedCount, activeLimi
           <div className="panel page-panel">
             <div className="page-card-header">
               <div className="inline-label">
-                <ShieldCheck size={16} />
-                <span>Sécurité</span>
+                <SlidersHorizontal size={16} />
+                <span>Système</span>
               </div>
             </div>
 
             <div className="setting-list">
-              <div className="setting-row">
-                <div className="setting-copy">
-                  <strong>Sources fiables</strong>
-                  <small>Vérification des URLs pendant les tâches</small>
-                </div>
+              <div className="meta-row">
+                <span>Notifications de fin</span>
+                <strong>Demandées au premier téléchargement</strong>
               </div>
-              <div className="setting-row">
-                <div className="setting-copy">
-                  <strong>Limite de vitesse</strong>
-                  <small>Optimisée pour les téléchargements sans blocage</small>
-                </div>
+              <div className="meta-row">
+                <span>Fichiers temporaires</span>
+                <strong>Supprimés si le transfert échoue</strong>
+              </div>
+              <div className="meta-row">
+                <span>Reprise</span>
+                <strong>Redémarre le fichier depuis le début</strong>
+              </div>
+              <div className="meta-row">
+                <span>Version</span>
+                <strong>0.2.0</strong>
               </div>
             </div>
           </div>

@@ -11,7 +11,9 @@
   --primary-strong: #4fa7e8;
   --primary-deep: #1d5f9a;
   --success: #6ec3a0;
+  --success-ink: #2f7d5b;
   --warning: #f4d287;
+  --warning-ink: #8a5a12;
   --shadow: 0 18px 40px rgba(76, 126, 180, 0.12);
   min-height: 100vh;
   display: flex;
@@ -32,7 +34,9 @@
   --primary-strong: #63b3eb;
   --primary-deep: #dfeeff;
   --success: #78c8a2;
+  --success-ink: #78c8a2;
   --warning: #f5d98a;
+  --warning-ink: #f5d98a;
   --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
   background: linear-gradient(135deg, #0c1725 0%, #101d2d 100%);
 }
@@ -202,7 +206,7 @@ button {
 
 .pill.success {
   background: rgba(110, 195, 160, 0.12);
-  color: var(--success);
+  color: var(--success-ink);
 }
 
 .queue-list {
@@ -221,6 +225,17 @@ button {
   background: var(--panel-soft);
   color: var(--text-soft);
   border: 1px solid var(--border);
+}
+
+button.queue-row {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.queue-row:hover {
+  background: var(--panel);
 }
 
 .main-panel {
@@ -470,12 +485,12 @@ button {
 }
 
 .task-badge.paused {
-  color: #d59a44;
+  color: var(--warning-ink);
   background: rgba(244, 210, 135, 0.18);
 }
 
 .task-badge.completed {
-  color: var(--success);
+  color: var(--success-ink);
   background: rgba(110, 195, 160, 0.16);
 }
 
@@ -820,4 +835,98 @@ button {
   .topbar {
     flex-wrap: wrap;
   }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  background: #0f1724;
+}
+
+:root[data-theme='dark'] body {
+  background: #0f1724;
+}
+
+:where(button, input, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary-strong);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(231, 111, 81, 0.35);
+  border-radius: 12px;
+  background: rgba(231, 111, 81, 0.1);
+  color: var(--text);
+}
+
+.notice.warning {
+  justify-content: flex-start;
+}
+
+.notice code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  font-family: inherit;
+}
+
+.notice .ghost-button {
+  padding: 6px 10px;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 22px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.hint {
+  margin: 0 0 16px;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.progress-bar span {
+  transition: width 0.3s linear;
+}
+
+.pill.status-downloading {
+  color: var(--primary-deep);
+}
+
+.pill.status-completed {
+  background: rgba(110, 195, 160, 0.12);
+  color: var(--success-ink);
+}
+
+.pill.status-failed {
+  background: rgba(231, 111, 81, 0.12);
+  color: #c9503a;
+}
+
+.pill.status-paused {
+  background: rgba(244, 210, 135, 0.2);
+  color: var(--warning-ink);
+}
+
+.pill.status-queued {
+  color: var(--text-soft);
 }

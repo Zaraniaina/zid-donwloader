@@ -1,12 +1,13 @@
-import { CheckCircle2, HardDrive, Sparkles } from 'lucide-react'
+import { CheckCircle2, Clock3, Gauge } from 'lucide-react'
 
 type StatsGridProps = {
   active: number
   completed: number
+  queued: number
   speedText: string
 }
 
-export function StatsGrid({ active, completed, speedText }: StatsGridProps) {
+export function StatsGrid({ active, completed, queued, speedText }: StatsGridProps) {
   return (
     <section className="stats-grid">
       <article className="stat-card accent">
@@ -22,7 +23,7 @@ export function StatsGrid({ active, completed, speedText }: StatsGridProps) {
         <div className="stat-label-row">
           <span className="stat-label">Vitesse</span>
           <span className="mini-icon">
-            <Sparkles size={14} />
+            <Gauge size={14} />
           </span>
         </div>
         <div className="stat-value">{speedText}</div>
@@ -40,11 +41,11 @@ export function StatsGrid({ active, completed, speedText }: StatsGridProps) {
 
       <article className="stat-card">
         <div className="stat-label-row">
-          <span className="stat-label">Stockage</span>
-          <HardDrive size={15} />
+          <span className="stat-label">En attente</span>
+          <Clock3 size={15} />
         </div>
-        <div className="stat-value">82%</div>
-        <p className="stat-foot">disponible</p>
+        <div className="stat-value">{queued}</div>
+        <p className="stat-foot">tâches dans la file</p>
       </article>
     </section>
   )

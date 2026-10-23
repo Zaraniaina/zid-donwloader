@@ -65,7 +65,7 @@ Donwloader/
 ```bash
 cd zid-downloader
 npm install
-npm run dev
+
 ```
 
 ## Lancement de la version desktop

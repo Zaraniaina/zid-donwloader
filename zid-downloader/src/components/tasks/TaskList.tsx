@@ -1,13 +1,23 @@
-import { AlertTriangle, CheckCircle2, Pause, Play } from 'lucide-react'
-import { formatBytes, getTotalBytes, type DownloadTask } from '../../lib/downloadQueue'
+import { AlertTriangle, CheckCircle2, Clock3, Pause, Play } from 'lucide-react'
+
+import { formatBytes, type DownloadTask } from '../../lib/downloadQueue'
 
 type TaskListProps = {
   tasks: DownloadTask[]
   selectedTask?: DownloadTask
-  onSelect: (taskId: number) => void
+  onSelect: (taskId: string) => void
+  emptyLabel: string
 }
 
-export function TaskList({ tasks, selectedTask, onSelect }: TaskListProps) {
+export function TaskList({ tasks, selectedTask, onSelect, emptyLabel }: TaskListProps) {
+  if (tasks.length === 0) {
+    return (
+      <p className="empty-state" role="status">
+        {emptyLabel}
+      </p>
+    )
+  }
+
   return (
     <div className="task-list">
       {tasks.map((task) => (
@@ -15,6 +25,7 @@ export function TaskList({ tasks, selectedTask, onSelect }: TaskListProps) {
           key={task.id}
           type="button"
           className={`task-item ${selectedTask?.id === task.id ? 'selected' : ''}`}
+          aria-current={selectedTask?.id === task.id ? 'true' : undefined}
           onClick={() => onSelect(task.id)}
         >
           <div className="task-main">
@@ -23,22 +34,31 @@ export function TaskList({ tasks, selectedTask, onSelect }: TaskListProps) {
               {task.status === 'Paused' && <Pause size={12} />}
               {task.status === 'Completed' && <CheckCircle2 size={12} />}
               {task.status === 'Failed' && <AlertTriangle size={12} />}
+              {task.status === 'Queued' && <Clock3 size={12} />}
             </div>
             <div className="task-copy">
               <strong>{task.name}</strong>
-              <span>{task.source}</span>
+              <span>{task.message ?? task.source}</span>
             </div>
           </div>
 
           <div className="task-meta">
-            <span>{getTotalBytes(task) > 0 ? formatBytes(getTotalBytes(task)) : task.size}</span>
+            <span>{task.totalBytes > 0 ? formatBytes(task.totalBytes) : 'taille inconnue'}</span>
             <span>
-              {task.mode === 'audio' ? 'MP3' : 'Fichier'} · {task.speed.toFixed(1)} MB/s
+              {task.mode === 'audio' ? 'MP3' : 'Fichier'} ·{' '}
+              {task.speed > 0 ? `${task.speed.toFixed(1)} Mo/s` : task.eta}
             </span>
           </div>
 
           <div className="progress-wrap">
-            <div className="progress-bar">
+            <div
+              className="progress-bar"
+              role="progressbar"
+              aria-label={`Progression de ${task.name}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={task.progress}
+            >
               <span style={{ width: `${task.progress}%` }} />
             </div>
             <small>{task.progress}%</small>

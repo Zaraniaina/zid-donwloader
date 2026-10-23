@@ -1,8 +1,8 @@
-import { Clock3, Download, Music4 } from 'lucide-react'
-import { Sidebar } from '../components/layout/Sidebar'
-import type { DownloadTask } from '../lib/downloadQueue'
+import { Clock3, Download, FolderOpen, Music4 } from 'lucide-react'
 
-type AppPage = 'dashboard' | 'converter' | 'folders' | 'history' | 'settings'
+import { Sidebar } from '../components/layout/Sidebar'
+import { formatDate, statusLabel, type DownloadTask } from '../lib/downloadQueue'
+import type { AppPage } from '../lib/navigation'
 
 type HistoryPageProps = {
   theme: 'light' | 'dark'
@@ -11,12 +11,25 @@ type HistoryPageProps = {
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
+  onSetTheme: () => void
   onOpenFile?: (task?: DownloadTask) => void
   onOpenFolder?: (folderPath?: string) => void
 }
 
-export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage, onNavigate, onOpenFile, onOpenFolder }: HistoryPageProps) {
-  const recentTasks = tasks.filter((task) => task.status === 'Completed' || task.status === 'Failed' || task.status === 'Paused')
+export function HistoryPage({
+  theme,
+  tasks,
+  queuedCount,
+  activeLimit,
+  activePage,
+  onNavigate,
+  onSetTheme,
+  onOpenFile,
+  onOpenFolder,
+}: HistoryPageProps) {
+  const recentTasks = tasks
+    .filter((task) => task.status === 'Completed' || task.status === 'Failed' || task.status === 'Paused')
+    .sort((left, right) => (right.completedAt ?? right.createdAt) - (left.completedAt ?? left.createdAt))
 
   return (
     <div className={`app-shell ${theme}`}>
@@ -27,6 +40,7 @@ export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage
         activeLimit={activeLimit}
         activePage={activePage}
         onNavigate={onNavigate}
+        onSetTheme={onSetTheme}
       />
 
       <main className="page-main">
@@ -48,7 +62,7 @@ export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage
                 <small>Les tâches terminées apparaîtront ici.</small>
               </div>
             ) : (
-              recentTasks.slice(0, 6).map((task) => (
+              recentTasks.map((task) => (
                 <div className="history-row" key={task.id}>
                   <div className="inline-label">
                     {task.mode === 'audio' ? <Music4 size={15} /> : <Download size={15} />}
@@ -56,14 +70,19 @@ export function HistoryPage({ theme, tasks, queuedCount, activeLimit, activePage
                   </div>
                   <div className="history-actions">
                     <small>
-                      {task.message ?? task.status} · {task.folder}
+                      {statusLabel(task.status)} · {formatDate(task.completedAt ?? task.createdAt)}
                     </small>
                     {task.status === 'Completed' ? (
                       <>
                         <button type="button" className="ghost-button" onClick={() => onOpenFile?.(task)}>
                           Ouvrir
                         </button>
-                        <button type="button" className="ghost-button" onClick={() => onOpenFolder?.(task.folder)}>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => onOpenFolder?.(task.folder)}
+                        >
+                          <FolderOpen size={14} />
                           Dossier
                         </button>
                       </>

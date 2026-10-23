@@ -1,7 +1,6 @@
-import { Clock3, Download, FolderOpen, ListTodo, Settings, Sparkles, Video } from 'lucide-react'
+import { Clock3, Download, FolderOpen, ListTodo, MoonStar, Settings, Sun, Video } from 'lucide-react'
 import type { DownloadTask } from '../../lib/downloadQueue'
-
-type AppPage = 'dashboard' | 'converter' | 'folders' | 'history' | 'settings'
+import type { AppPage } from '../../lib/navigation'
 
 type SidebarProps = {
   tasks: DownloadTask[]
@@ -10,9 +9,10 @@ type SidebarProps = {
   activeLimit: number
   activePage: AppPage
   onNavigate: (page: AppPage) => void
+  onSetTheme: () => void
 }
 
-export function Sidebar({ tasks, theme, queuedCount, activeLimit, activePage, onNavigate }: SidebarProps) {
+export function Sidebar({ tasks, theme, queuedCount, activeLimit, activePage, onNavigate, onSetTheme }: SidebarProps) {
   const navItems: Array<{ page: AppPage; label: string; Icon: typeof Download }> = [
     { page: 'dashboard', label: 'Downloads', Icon: ListTodo },
     { page: 'converter', label: 'Convertisseur', Icon: Video },
@@ -61,18 +61,20 @@ export function Sidebar({ tasks, theme, queuedCount, activeLimit, activePage, on
             <span>Slots actifs</span>
             <strong>{activeLimit}</strong>
           </div>
-          <div className="queue-row">
+          <button
+            type="button"
+            className="queue-row"
+            onClick={onSetTheme}
+            aria-label={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
+          >
             <span>Thème</span>
-            <strong>{theme}</strong>
-          </div>
+            <strong>{theme === 'dark' ? <MoonStar size={15} /> : <Sun size={15} />}</strong>
+          </button>
         </div>
       </div>
 
       <div className="panel compact promo-panel">
-        <div className="inline-label">
-          <Sparkles size={15} />
-          <span>Gratuit</span>
-        </div>
+        <strong>Gratuit</strong>
         <p>URLs, fichiers et conversion audio sans frais cachés.</p>
       </div>
     </aside>

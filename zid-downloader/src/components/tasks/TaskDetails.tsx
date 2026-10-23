@@ -1,19 +1,34 @@
-import { Download, FolderOpen, Pause, Play, Video } from 'lucide-react'
-import { formatBytes, getTotalBytes, type DownloadTask } from '../../lib/downloadQueue'
+import { Download, FolderOpen, Pause, Play, RotateCcw, Trash2, Video } from 'lucide-react'
+
+import { formatBytes, formatDate, type DownloadTask } from '../../lib/downloadQueue'
 
 type TaskDetailsProps = {
   selectedTask?: DownloadTask
-  onStartDownload: (taskId: number) => void
-  onTogglePause: (taskId: number) => void
-  onRemoveTask: (taskId: number) => void
+  onStartDownload: (taskId: string) => void
+  onTogglePause: (taskId: string) => void
+  onRemoveTask: (taskId: string) => void
   onOpenFolder: (folderPath?: string) => void
   onOpenFile: (task?: DownloadTask) => void
 }
 
-export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRemoveTask, onOpenFolder, onOpenFile }: TaskDetailsProps) {
+export function TaskDetails({
+  selectedTask,
+  onStartDownload,
+  onTogglePause,
+  onRemoveTask,
+  onOpenFolder,
+  onOpenFile,
+}: TaskDetailsProps) {
   if (!selectedTask) {
-    return null
+    return (
+      <p className="empty-state" role="status">
+        Ajoutez ou sélectionnez une tâche pour voir son détail.
+      </p>
+    )
   }
+
+  const canPause = selectedTask.status === 'Downloading' || selectedTask.status === 'Queued'
+  const canRestart = selectedTask.status === 'Paused' || selectedTask.status === 'Failed'
 
   return (
     <>
@@ -32,7 +47,9 @@ export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRe
       <div className="metrics-grid">
         <div>
           <label>Taille</label>
-          <strong>{getTotalBytes(selectedTask) > 0 ? formatBytes(getTotalBytes(selectedTask)) : selectedTask.size}</strong>
+          <strong>
+            {selectedTask.totalBytes > 0 ? formatBytes(selectedTask.totalBytes) : 'inconnue'}
+          </strong>
         </div>
         <div>
           <label>Progression</label>
@@ -40,11 +57,11 @@ export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRe
         </div>
         <div>
           <label>Vitesse</label>
-          <strong>{selectedTask.speed.toFixed(1)} MB/s</strong>
+          <strong>{selectedTask.speed > 0 ? `${selectedTask.speed.toFixed(1)} Mo/s` : '—'}</strong>
         </div>
         <div>
-          <label>ETA</label>
-          <strong>{selectedTask.eta}</strong>
+          <label>Temps restant</label>
+          <strong>{selectedTask.status === 'Downloading' ? selectedTask.eta : '—'}</strong>
         </div>
       </div>
 
@@ -58,8 +75,8 @@ export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRe
           <strong>{selectedTask.mode === 'audio' ? 'Conversion MP3' : 'Téléchargement'}</strong>
         </div>
         <div className="meta-row">
-          <span>Dernière vérif.</span>
-          <strong>2 min ago</strong>
+          <span>Ajouté le</span>
+          <strong>{formatDate(selectedTask.createdAt)}</strong>
         </div>
         <div className="meta-row">
           <span>Statut</span>
@@ -68,25 +85,54 @@ export function TaskDetails({ selectedTask, onStartDownload, onTogglePause, onRe
       </div>
 
       <div className="button-row">
-        <button type="button" className="secondary-button action-button" onClick={() => onStartDownload(selectedTask.id)}>
-          <Download size={14} />
-          Lancer
-        </button>
-        <button type="button" className="secondary-button action-button" onClick={() => onTogglePause(selectedTask.id)}>
-          {selectedTask.status === 'Paused' ? <Play size={14} /> : <Pause size={14} />}
-          {selectedTask.status === 'Paused' ? 'Reprendre' : 'Pause'}
-        </button>
-        <button type="button" className="secondary-button action-button" onClick={() => onOpenFolder(selectedTask.folder)}>
-          <FolderOpen size={14} />
-          Ouvrir dossier
-        </button>
-        {selectedTask.status === 'Completed' ? (
-          <button type="button" className="secondary-button action-button" onClick={() => onOpenFile(selectedTask)}>
-            <Download size={14} />
-            Ouvrir fichier
+        {canPause ? (
+          <button
+            type="button"
+            className="secondary-button action-button"
+            onClick={() => onTogglePause(selectedTask.id)}
+          >
+            <Pause size={14} />
+            Pause
           </button>
         ) : null}
-        <button type="button" className="secondary-button action-button" onClick={() => onRemoveTask(selectedTask.id)}>
+
+        {canRestart ? (
+          <button
+            type="button"
+            className="secondary-button action-button"
+            onClick={() => onStartDownload(selectedTask.id)}
+          >
+            {selectedTask.status === 'Failed' ? <RotateCcw size={14} /> : <Play size={14} />}
+            {selectedTask.status === 'Failed' ? 'Réessayer' : 'Reprendre'}
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          className="secondary-button action-button"
+          onClick={() => onOpenFolder(selectedTask.folder)}
+        >
+          <FolderOpen size={14} />
+          Dossier
+        </button>
+
+        {selectedTask.status === 'Completed' ? (
+          <button
+            type="button"
+            className="secondary-button action-button"
+            onClick={() => onOpenFile(selectedTask)}
+          >
+            <Download size={14} />
+            Ouvrir
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          className="secondary-button action-button"
+          onClick={() => onRemoveTask(selectedTask.id)}
+        >
+          <Trash2 size={14} />
           Supprimer
         </button>
       </div>
