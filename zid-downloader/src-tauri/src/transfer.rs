@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::media;
 
@@ -253,6 +253,205 @@ async fn download_with_events(
     Ok(final_path.to_string_lossy().to_string())
 }
 
+const VIDEO_PAGE_DOMAINS: &[&str] = &[
+    "youtube.com",
+    "youtu.be",
+    "vimeo.com",
+    "dailymotion.com",
+    "tiktok.com",
+    "soundcloud.com",
+    "twitch.tv",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "reddit.com",
+];
+
+pub fn is_video_page(url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return false;
+    }
+
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+
+    let host = host.to_ascii_lowercase();
+    VIDEO_PAGE_DOMAINS
+        .iter()
+        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+}
+
+pub fn parse_size_token(token: &str) -> Option<f64> {
+    let token = token.trim().trim_start_matches('~');
+    let lower = token.to_ascii_lowercase();
+
+    let (number, multiplier) = if let Some(rest) = lower.strip_suffix("kib") {
+        (rest, 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("mib") {
+        (rest, 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("gib") {
+        (rest, 1024.0 * 1024.0 * 1024.0)
+    } else if let Some(rest) = lower.strip_suffix("kb") {
+        (rest, 1000.0)
+    } else if let Some(rest) = lower.strip_suffix("mb") {
+        (rest, 1_000_000.0)
+    } else if let Some(rest) = lower.strip_suffix("gb") {
+        (rest, 1_000_000_000.0)
+    } else if let Some(rest) = lower.strip_suffix('b') {
+        (rest, 1.0)
+    } else {
+        return None;
+    };
+
+    number
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .map(|value| value * multiplier)
+}
+
+pub fn parse_ytdlp_progress(line: &str) -> Option<(f64, f64, f64)> {
+    let line = line.trim();
+    if !line.starts_with("[download]") {
+        return None;
+    }
+
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    let percent = tokens
+        .iter()
+        .find(|token| token.ends_with('%'))?
+        .trim_end_matches('%')
+        .parse::<f64>()
+        .ok()?;
+
+    let total = tokens
+        .iter()
+        .position(|token| *token == "of")
+        .and_then(|index| tokens.get(index + 1))
+        .and_then(|token| parse_size_token(token))?;
+
+    let speed = tokens
+        .iter()
+        .position(|token| *token == "at")
+        .and_then(|index| tokens.get(index + 1))
+        .and_then(|token| parse_size_token(token))
+        .unwrap_or(0.0);
+
+    Some((total * percent / 100.0, total, speed))
+}
+
+async fn run_ytdlp(
+    url: &str,
+    dest_dir: &Path,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(u64, u64, f64),
+    mut on_convert: impl FnMut(),
+) -> Result<String, String> {
+    tokio::fs::create_dir_all(dest_dir)
+        .await
+        .map_err(|error| format!("Dossier impossible à créer : {error}"))?;
+
+    let template = format!("{}\\%(title)s.%(ext)s", dest_dir.display());
+
+    let mut child = tokio::process::Command::new("yt-dlp")
+        .args(["-x", "--audio-format", "mp3", "--audio-quality", "192K"])
+        .args(["--newline", "--no-playlist", "--no-simulate"])
+        .args(["--print", "after_move:filepath"])
+        .arg("-o")
+        .arg(&template)
+        .arg(url)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|error| format!("yt-dlp n'a pas pu démarrer : {error}"))?;
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Sortie de yt-dlp indisponible.".to_string())?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Erreurs de yt-dlp indisponibles.".to_string())?;
+
+    let stderr_task = tokio::spawn(async move {
+        let mut buffer = Vec::new();
+        let _ = tokio::io::copy(&mut stderr, &mut buffer).await;
+        buffer
+    });
+
+    let mut final_path: Option<String> = None;
+    let mut last_emit = Instant::now();
+    let mut lines = BufReader::new(&mut stdout).lines();
+
+    loop {
+        let line = tokio::select! {
+            next = lines.next_line() => match next {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(error) => return Err(format!("Lecture de yt-dlp impossible : {error}")),
+            },
+            _ = tokio::time::sleep(Duration::from_millis(250)) => {
+                if cancel.load(Ordering::Relaxed) {
+                    let _ = child.start_kill();
+                    return Err(CANCELLED.to_string());
+                }
+                continue;
+            }
+        };
+
+        if let Some((downloaded, total, speed)) = parse_ytdlp_progress(&line) {
+            if last_emit.elapsed() >= PROGRESS_INTERVAL {
+                on_progress(downloaded as u64, total as u64, speed);
+                last_emit = Instant::now();
+            }
+            continue;
+        }
+
+        if line.starts_with("[ExtractAudio]") {
+            on_convert();
+            continue;
+        }
+
+        let candidate = line.trim();
+        if candidate.to_ascii_lowercase().ends_with(".mp3") && Path::new(candidate).is_absolute() {
+            final_path = Some(candidate.to_string());
+        }
+    }
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|error| format!("yt-dlp interrompu : {error}"))?;
+    let stderr_text = String::from_utf8_lossy(&stderr_task.await.unwrap_or_default()).to_string();
+
+    if cancel.load(Ordering::Relaxed) {
+        return Err(CANCELLED.to_string());
+    }
+
+    if !status.success() {
+        let detail = stderr_text
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .map(|line| line.trim().trim_start_matches("ERROR: ").to_string())
+            .unwrap_or_else(|| "yt-dlp n'a pas pu traiter cette adresse.".to_string());
+
+        return Err(format!("Conversion impossible : {detail}"));
+    }
+
+    final_path
+        .filter(|candidate| Path::new(candidate).exists())
+        .ok_or_else(|| "yt-dlp n'a pas produit de fichier MP3.".to_string())
+}
+
 #[tauri::command]
 pub async fn download_and_convert_to_mp3(
     app: AppHandle,
@@ -265,10 +464,66 @@ pub async fn download_and_convert_to_mp3(
     media::ensure_ffmpeg()?;
 
     let cancel = register(&state, &id);
-    let result = convert_with_events(&app, &id, &url, Path::new(&path), &cancel).await;
+
+    let result = if is_video_page(&url) {
+        match media::ensure_yt_dlp() {
+            Ok(()) => {
+                let dest_dir = Path::new(&path)
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| PathBuf::from("."));
+
+                convert_page_with_events(&app, &id, &url, &dest_dir, &cancel).await
+            }
+            Err(error) => Err(error),
+        }
+    } else {
+        convert_with_events(&app, &id, &url, Path::new(&path), &cancel).await
+    };
+
     unregister(&state, &id);
 
     result
+}
+
+async fn convert_page_with_events(
+    app: &AppHandle,
+    id: &str,
+    url: &str,
+    dest_dir: &Path,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    let event_id = id.to_string();
+    let progress_handle = app.clone();
+    let phase_handle = app.clone();
+
+    run_ytdlp(
+        url,
+        dest_dir,
+        cancel,
+        move |downloaded, total, speed| {
+            let _ = progress_handle.emit(
+                "transfer://progress",
+                ProgressEvent {
+                    id: event_id.clone(),
+                    downloaded,
+                    total,
+                    bytes_per_second: speed,
+                },
+            );
+        },
+        move || {
+            let _ = phase_handle.emit(
+                "transfer://phase",
+                PhaseEvent {
+                    id: id.to_string(),
+                    phase: "convert".to_string(),
+                },
+            );
+        },
+    )
+    .await
 }
 
 async fn convert_with_events(
@@ -499,5 +754,28 @@ mod tests {
         assert!(validate_url("file:///etc/passwd").is_err());
         assert!(validate_url("javascript:alert(1)").is_err());
         assert!(validate_url("pas une url").is_err());
+    }
+
+    #[test]
+    fn detects_video_pages_and_direct_files() {
+        assert!(is_video_page("https://youtu.be/lG6YOguMWKg"));
+        assert!(is_video_page("https://www.youtube.com/watch?v=lG6YOguMWKg"));
+        assert!(is_video_page("https://vimeo.com/12345"));
+        assert!(!is_video_page("https://example.com/video.mp4"));
+        assert!(!is_video_page("https://youtube.com.example.org/watch"));
+    }
+
+    #[test]
+    fn reads_ytdlp_progress_lines() {
+        let (downloaded, total, speed) =
+            parse_ytdlp_progress("[download]  45.3% of 10.00MiB at 1.50MiB/s ETA 00:05")
+                .expect("ligne de progression");
+
+        assert!((total - 10.0 * 1024.0 * 1024.0).abs() < 1.0);
+        assert!((downloaded - total * 0.453).abs() < 1.0);
+        assert!((speed - 1.5 * 1024.0 * 1024.0).abs() < 1.0);
+
+        assert!(parse_ytdlp_progress("[ExtractAudio] Converting audio from webm to mp3").is_none());
+        assert!(parse_ytdlp_progress("[download] Destination: C:\\temp\\video.webm").is_none());
     }
 }

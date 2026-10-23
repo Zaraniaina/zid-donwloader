@@ -4,7 +4,7 @@ import { AlertTriangle, Download, FolderOpen, Music4, Video } from 'lucide-react
 import { Sidebar } from '../components/layout/Sidebar'
 import type { DownloadTask } from '../lib/downloadQueue'
 import type { AppPage } from '../lib/navigation'
-import { checkFfmpeg } from '../lib/transfer'
+import { checkFfmpeg, checkYtDlp } from '../lib/transfer'
 
 type ConverterPageProps = {
   theme: 'light' | 'dark'
@@ -40,6 +40,7 @@ export function ConverterPage({
   onDismissNotice,
 }: ConverterPageProps) {
   const [ffmpegReady, setFfmpegReady] = useState<boolean | null>(null)
+  const [ytDlpReady, setYtDlpReady] = useState<boolean | null>(null)
 
   useEffect(() => {
     let active = true
@@ -47,6 +48,12 @@ export function ConverterPage({
     void checkFfmpeg().then((ready) => {
       if (active) {
         setFfmpegReady(ready)
+      }
+    })
+
+    void checkYtDlp().then((ready) => {
+      if (active) {
+        setYtDlpReady(ready)
       }
     })
 
@@ -94,6 +101,17 @@ export function ConverterPage({
           </div>
         ) : null}
 
+        {ffmpegReady !== false && ytDlpReady === false ? (
+          <div className="notice warning" role="status">
+            <AlertTriangle size={16} />
+            <span>
+              yt-dlp n’est pas détecté : seules les URL directes de fichier fonctionnent.
+              Pour convertir des pages YouTube, Vimeo et autres, installez-le avec{' '}
+              <code>winget install yt-dlp.yt-dlp</code> puis relancez l’application.
+            </span>
+          </div>
+        ) : null}
+
         <div className="panel page-panel">
           <div className="page-card-header">
             <div className="inline-label">
@@ -127,8 +145,8 @@ export function ConverterPage({
           </div>
 
           <p className="hint">
-            Le lien doit pointer vers un fichier vidéo (mp4, webm, mkv). Les pages de lecture
-            (YouTube, Vimeo) ne sont pas prises en charge.
+            Collez l’adresse d’une page vidéo (YouTube, Vimeo, Dailymotion, TikTok) ou l’URL directe
+            d’un fichier (mp4, webm, mkv). Sortie MP3 192 kbps.
           </p>
 
           <div className="settings-grid three-col">

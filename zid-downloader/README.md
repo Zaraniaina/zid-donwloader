@@ -31,6 +31,14 @@ L'installeur NSIS sort dans `src-tauri/target/release/bundle/nsis/`. Pour vérif
 npm run tauri build -- --no-bundle
 ```
 
+## Icône de l'application
+
+La source de l'icône est `app-icon.png` (fond rendu transparent). Pour la régénérer après un changement :
+
+```bash
+npx tauri icon app-icon.png
+```
+
 ## Vérifications
 
 ```bash
@@ -45,6 +53,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Pause annule le transfert et supprime le fichier partiel. Reprendre repart du début : il n'y a pas encore de reprise par `Range`.
 - Un fichier existant n'est jamais écrasé, un suffixe `(1)` est ajouté.
 - La conversion MP3 utilise FFmpeg, sortie 192 kbps.
+- La bascule clair/sombre est en bas de la sidebar, présente sur toutes les pages.
+- Une notification système est envoyée à la fin d'un téléchargement.
 
 ## Limites connues
 
