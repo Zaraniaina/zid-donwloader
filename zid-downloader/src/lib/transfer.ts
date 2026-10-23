@@ -76,3 +76,15 @@ export async function checkFfmpeg(): Promise<boolean> {
     return false
   }
 }
+
+export async function checkYtDlp(): Promise<boolean> {
+  if (!isTauri()) {
+    return false
+  }
+
+  try {
+    return await invoke<boolean>('check_yt_dlp')
+  } catch {
+    return false
+  }
+}

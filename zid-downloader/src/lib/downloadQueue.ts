@@ -110,6 +110,38 @@ export function extractFileNameFromUrl(url: string): string {
   }
 }
 
+const VIDEO_PAGE_DOMAINS = [
+  'youtube.com',
+  'youtu.be',
+  'vimeo.com',
+  'dailymotion.com',
+  'tiktok.com',
+  'soundcloud.com',
+  'twitch.tv',
+  'facebook.com',
+  'instagram.com',
+  'twitter.com',
+  'x.com',
+  'reddit.com',
+] as const
+
+export function isVideoPageUrl(value: string): boolean {
+  let parsed: URL
+
+  try {
+    parsed = new URL(value.trim())
+  } catch {
+    return false
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false
+  }
+
+  const host = parsed.hostname.toLowerCase()
+  return VIDEO_PAGE_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
+}
+
 export function buildDownloadPath(folder: string, fileName: string): string {
   const cleanFolder = folder.trim().replace(/[\\/]+$/, '')
   const cleanName = fileName.replace(/[\\/:*?"<>|]/g, '_')
@@ -133,7 +165,10 @@ function createId(): string {
 
 export function createTaskFromUrl(url: string, mode: TaskMode, destinationFolder: string): DownloadTask {
   const source = url.trim()
-  const rawName = extractFileNameFromUrl(source)
+  const rawName =
+    mode === 'audio' && isVideoPageUrl(source)
+      ? 'audio YouTube'
+      : extractFileNameFromUrl(source)
   const safeName = mode === 'audio' ? `${rawName.replace(/\.[^.]+$/, '')}.mp3` : rawName
   const folder = destinationFolder.trim() || 'Downloads'
   const targetPath = mode === 'audio' ? buildAudioPath(folder, safeName) : buildDownloadPath(folder, safeName)

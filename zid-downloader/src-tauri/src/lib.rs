@@ -14,7 +14,8 @@ pub fn run() {
       transfer::download_file,
       transfer::download_and_convert_to_mp3,
       transfer::cancel_download,
-      media::check_ffmpeg
+      media::check_ffmpeg,
+      media::check_yt_dlp
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

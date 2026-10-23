@@ -19,7 +19,7 @@ L’objectif n’est pas d’être un produit payant, mais un outil utile, gratu
 - Ajout d’un téléchargement par URL
 - Sélection du dossier de destination
 - Suivi de progression et vitesse estimée
-- Mise en pause, reprise et suppression
+- Mise en pause et suppression (la reprise repart du début : pas encore de reprise par `Range`)
 - File d’attente simple
 - Persistance locale des tâches
 - Conversion vidéo vers MP3 depuis une URL vidéo
@@ -42,8 +42,9 @@ Donwloader/
 ├── docs/
 │   ├── 01-cahier-des-charges.md
 │   ├── 02-diagrammes-uml.md
-│   └── 03-plan-developpement.md
-├── graphify-out/
+│   ├── 03-plan-developpement.md
+│   ├── 04-plan-amelioration.md
+│   └── graphify-out/
 ├── zid-downloader/
 │   ├── src/
 │   ├── src-tauri/
@@ -73,23 +74,26 @@ npm install
 ```bash
 cd zid-downloader
 npm install
-npm run build
-cargo check --manifest-path src-tauri/Cargo.toml
+npm run tauri dev
 ```
 
-## Tests
+## Tests et vérifications
 
 ```bash
 cd zid-downloader
-npm test
+npm test        # tests front (Vitest)
+npm run check   # TypeScript + tests + ESLint
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Build de production
 
 ```bash
 cd zid-downloader
-npm run build
+npm run tauri build
 ```
+
+L'installeur Windows sort dans `zid-downloader/src-tauri/target/release/bundle/nsis/`.
 
 ## Règle de la version actuelle
 
@@ -102,4 +106,4 @@ Cette version cible un usage gratuit et immédiat :
 
 ## Statut
 
-Version actuelle orientée gratuit, avec interface fonctionnelle, logique de file d’attente validée et base de conversion vidéo vers MP3 en préparation.
+Version actuelle : moteur de téléchargement réel côté Rust (streaming, progression en direct, annulation), conversion MP3 via FFmpeg en 192 kbps, file d'attente, thème clair/sombre avec bascule dans la sidebar, icône de bureau. Reste à faire : reprise par `Range` après pause, conversion depuis des pages vidéo (nécessite `yt-dlp`).
