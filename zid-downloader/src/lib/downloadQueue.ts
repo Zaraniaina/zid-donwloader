@@ -1,155 +1,224 @@
 export type TaskStatus = 'Downloading' | 'Queued' | 'Paused' | 'Completed' | 'Failed'
+export type TaskMode = 'download' | 'audio'
 
 export type DownloadTask = {
-  id: number
+  id: string
   name: string
   source: string
-  size: string
   progress: number
   speed: number
-  status: TaskStatus
   eta: string
+  status: TaskStatus
   folder: string
   category: string
+  mode: TaskMode
+  message?: string
+  targetPath?: string
+  downloadedBytes: number
+  totalBytes: number
+  createdAt: number
+  completedAt?: number
+}
+
+export type TaskProgress = {
+  id: string
+  downloaded: number
+  total: number
+  bytesPerSecond: number
 }
 
 export const MAX_ACTIVE_TASKS = 1
+
 export const STORAGE_KEYS = {
   tasks: 'zid-downloader.tasks',
   theme: 'zid-downloader.theme',
+  folder: 'zid-downloader.folder',
+  mode: 'zid-downloader.mode',
+} as const
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 octet'
+  }
+
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** index
+
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
 }
 
-export const defaultTasks: DownloadTask[] = [
-  {
-    id: 1,
-    name: 'project-setup.zip',
-    source: 'https://cdn.example.com/project-setup.zip',
-    size: '2.1 GB',
-    progress: 68,
-    speed: 4.7,
-    status: 'Downloading',
-    eta: '00:11:42',
-    folder: 'Downloads',
-    category: 'Archives',
-  },
-  {
-    id: 2,
-    name: 'launch-demo.mp4',
-    source: 'https://cdn.example.com/launch-demo.mp4',
-    size: '860 MB',
-    progress: 42,
-    speed: 3.2,
-    status: 'Queued',
-    eta: '00:22:10',
-    folder: 'Videos',
-    category: 'Videos',
-  },
-  {
-    id: 3,
-    name: 'design-system.pdf',
-    source: 'https://cdn.example.com/design-system.pdf',
-    size: '540 MB',
-    progress: 100,
-    speed: 0,
-    status: 'Completed',
-    eta: '00:00:00',
-    folder: 'Documents',
-    category: 'Documents',
-  },
-]
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '—'
+  }
+
+  const total = Math.round(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const remaining = total % 60
+
+  return [hours, minutes, remaining].map((value) => String(value).padStart(2, '0')).join(':')
+}
+
+export function formatDate(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return '—'
+  }
+
+  return new Date(timestamp).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export function statusLabel(status: TaskStatus): string {
+  switch (status) {
+    case 'Downloading':
+      return 'En cours'
+    case 'Queued':
+      return 'En attente'
+    case 'Paused':
+      return 'En pause'
+    case 'Completed':
+      return 'Terminé'
+    case 'Failed':
+      return 'Échec'
+  }
+}
+
+export function isValidSourceUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim())
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 export function extractFileNameFromUrl(url: string): string {
   try {
     const parsed = new URL(url)
     const pathname = parsed.pathname
-    const fileName = pathname.split('/').filter(Boolean).pop() || 'download.bin'
-    return decodeURIComponent(fileName).replace(/[?#].*$/, '').trim() || 'download.bin'
+    const fileName = pathname.split('/').filter(Boolean).pop() || 'fichier'
+    return decodeURIComponent(fileName).replace(/[?#].*$/, '').trim() || 'fichier'
   } catch {
-    const fallback = url.split('/').filter(Boolean).pop() || 'download.bin'
-    return decodeURIComponent(fallback).split('?')[0].split('#')[0].trim() || 'download.bin'
+    const fallback = url.split('/').filter(Boolean).pop() || 'fichier'
+    return decodeURIComponent(fallback).split('?')[0].split('#')[0].trim() || 'fichier'
   }
 }
 
 export function buildDownloadPath(folder: string, fileName: string): string {
   const cleanFolder = folder.trim().replace(/[\\/]+$/, '')
   const cleanName = fileName.replace(/[\\/:*?"<>|]/g, '_')
-  return `${cleanFolder || 'Downloads'}/${cleanName || 'download.bin'}`
+  return `${cleanFolder || 'Downloads'}/${cleanName || 'fichier'}`
 }
 
-export function createTaskFromUrl(url: string): DownloadTask {
-  const taskName = extractFileNameFromUrl(url)
+export function buildAudioPath(folder: string, fileName: string): string {
+  const cleanFile = (fileName || 'video.mp4').replace(/[\\/:*?"<>|]/g, '_')
+  const withoutExtension = cleanFile.includes('.') ? cleanFile.replace(/\.[^.]+$/, '') : cleanFile
+  return `${(folder || 'Downloads').trim().replace(/[\\/]+$/, '')}/${withoutExtension}.mp3`
+}
+
+function createId(): string {
+  const webCrypto = globalThis.crypto
+  if (webCrypto && typeof webCrypto.randomUUID === 'function') {
+    return webCrypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+}
+
+export function createTaskFromUrl(url: string, mode: TaskMode, destinationFolder: string): DownloadTask {
+  const source = url.trim()
+  const rawName = extractFileNameFromUrl(source)
+  const safeName = mode === 'audio' ? `${rawName.replace(/\.[^.]+$/, '')}.mp3` : rawName
+  const folder = destinationFolder.trim() || 'Downloads'
+  const targetPath = mode === 'audio' ? buildAudioPath(folder, safeName) : buildDownloadPath(folder, safeName)
 
   return {
-    id: Date.now() + Math.floor(Math.random() * 1000),
-    name: taskName,
-    source: url,
-    size: '1.8 GB',
-    progress: 12,
-    speed: 2.1,
+    id: createId(),
+    name: safeName,
+    source,
+    progress: 0,
+    speed: 0,
+    eta: '—',
     status: 'Queued',
-    eta: '00:19:58',
-    folder: 'Downloads',
-    category: 'Applications',
+    folder,
+    category: mode === 'audio' ? 'Audio' : 'Fichiers',
+    mode,
+    message: mode === 'audio' ? 'En attente de conversion' : 'En attente',
+    targetPath,
+    downloadedBytes: 0,
+    totalBytes: 0,
+    createdAt: Date.now(),
   }
 }
 
-export function advanceDownloadQueue(currentTasks: DownloadTask[]): DownloadTask[] {
-  let nextTasks = currentTasks.map((task) => {
-    if (task.status !== 'Downloading') {
-      return task
-    }
-
-    const nextProgress = Math.min(task.progress + 6, 100)
-    const nextStatus: TaskStatus = nextProgress >= 100 ? 'Completed' : 'Downloading'
-
-    return {
-      ...task,
-      progress: nextProgress,
-      status: nextStatus,
-      speed: nextStatus === 'Completed' ? 0 : Number((task.speed * 1.08 + 0.2).toFixed(1)),
-      eta: nextStatus === 'Completed' ? '00:00:00' : task.eta,
-    }
-  })
-
-  const activeCount = nextTasks.filter((task) => task.status === 'Downloading').length
-  if (activeCount < MAX_ACTIVE_TASKS) {
-    const nextQueuedTask = nextTasks.find((task) => task.status === 'Queued')
-    if (nextQueuedTask) {
-      nextTasks = nextTasks.map((task) =>
-        task.id === nextQueuedTask.id
-          ? {
-              ...task,
-              status: 'Downloading',
-              speed: 2.8,
-              eta: '00:09:18',
-            }
-          : task,
-      )
-    }
+export function applyProgress(task: DownloadTask, progress: TaskProgress): DownloadTask {
+  if (task.status !== 'Downloading') {
+    return task
   }
 
-  return nextTasks
+  const total = progress.total > 0 ? progress.total : task.totalBytes
+  const percent = total > 0 ? Math.min(99, Math.floor((progress.downloaded / total) * 100)) : 0
+  const remaining =
+    total > 0 && progress.bytesPerSecond > 0
+      ? Math.max(0, (total - progress.downloaded) / progress.bytesPerSecond)
+      : 0
+
+  return {
+    ...task,
+    downloadedBytes: progress.downloaded,
+    totalBytes: total,
+    progress: percent,
+    speed: progress.bytesPerSecond / (1024 * 1024),
+    eta: remaining > 0 ? formatDuration(remaining) : '—',
+  }
+}
+
+export function applyPhase(task: DownloadTask, phase: string): DownloadTask {
+  if (phase !== 'convert' || task.status !== 'Downloading') {
+    return task
+  }
+
+  return { ...task, progress: 99, speed: 0, eta: '—', message: 'Conversion MP3 en cours' }
+}
+
+function isStoredTask(value: unknown): value is DownloadTask {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const task = value as Partial<DownloadTask>
+  return typeof task.id === 'string' && typeof task.source === 'string' && typeof task.name === 'string'
 }
 
 export function getStoredTasks(): DownloadTask[] {
   if (typeof window === 'undefined') {
-    return defaultTasks
+    return []
   }
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEYS.tasks)
     if (!raw) {
-      return defaultTasks
+      return []
     }
 
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return defaultTasks
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) {
+      return []
     }
 
-    return parsed as DownloadTask[]
+    return parsed.filter(isStoredTask).map((task) =>
+      task.status === 'Downloading'
+        ? { ...task, status: 'Paused', speed: 0, eta: '—', message: 'Interrompu à la fermeture' }
+        : task,
+    )
   } catch {
-    return defaultTasks
+    return []
   }
 }
 

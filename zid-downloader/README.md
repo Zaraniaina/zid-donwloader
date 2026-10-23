@@ -1,75 +1,53 @@
-# React + TypeScript + Vite
+# zid-downloader
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Gestionnaire de téléchargements desktop en Tauri 2 + React. Télécharge une URL vers un dossier choisi, ou extrait l'audio d'un fichier vidéo en MP3.
 
-Currently, two official plugins are available:
+## Prérequis
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node 18 ou plus
+- Rust stable (cargo)
+- FFmpeg dans le PATH pour la conversion MP3 (`winget install Gyan.FFmpeg`)
+- WebView2 sur Windows (déjà présent sur Windows 10 et 11)
 
-## React Compiler
+## Démarrage en mode desktop
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cd zid-downloader
+npm install
+npm run tauri dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+La première compilation Rust prend quelques minutes. La fenêtre s'ouvre ensuite avec le rechargement à chaud du frontend.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Build de production
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run tauri build
 ```
+
+L'installeur NSIS sort dans `src-tauri/target/release/bundle/nsis/`. Pour vérifier seulement la compilation sans créer l'installeur :
+
+```bash
+npm run tauri build -- --no-bundle
+```
+
+## Vérifications
+
+```bash
+npm run check                                  # TypeScript, tests front, ESLint
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+## Fonctionnement réel
+
+- Le transfert HTTP se fait côté Rust en streaming, avec temporaire `.part` et renommage à la fin.
+- La progression, la vitesse et le temps restant viennent d'événements émis par Rust toutes les 300 ms.
+- Pause annule le transfert et supprime le fichier partiel. Reprendre repart du début : il n'y a pas encore de reprise par `Range`.
+- Un fichier existant n'est jamais écrasé, un suffixe `(1)` est ajouté.
+- La conversion MP3 utilise FFmpeg, sortie 192 kbps.
+
+## Limites connues
+
+- Une seule tâche active à la fois. Les suivantes attendent dans la file.
+- Seules les URL directes sont acceptées (`http` et `https`). Une page YouTube renvoie du HTML et la conversion échoue.
+- Pas de reprise après coupure : le fichier repart de zéro.

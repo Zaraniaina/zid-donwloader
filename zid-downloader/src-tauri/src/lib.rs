@@ -1,8 +1,21 @@
+mod media;
+mod transfer;
+
+use transfer::Transfers;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_fs::init())
+    .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_shell::init())
+    .manage(Transfers::default())
+    .invoke_handler(tauri::generate_handler![
+      transfer::download_file,
+      transfer::download_and_convert_to_mp3,
+      transfer::cancel_download,
+      media::check_ffmpeg
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
